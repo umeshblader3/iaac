@@ -1,0 +1,224 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Parameters": {
+    "VpcCIDR": {
+      "Description": "Please enter the IP range (CIDR notation) for this VPC",
+      "Type": "String",
+      "Default": "10.0.0.0/16"
+    },
+    "PublicSubnetCIDR": {
+      "Description": "Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone",
+      "Type": "String",
+      "Default": "10.0.0.0/28"
+    },
+    "PriSubnetCIDR": {
+      "Description": "Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone",
+      "Type": "String",
+      "Default": "10.0.0.17/28"
+    }
+
+  },
+
+  "Resources" : {
+    "appVPC" : {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": { "Ref" : "VpcCIDR" },
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true,
+        "InstanceTenancy": "default",
+        "Tags": [ { "Key" :  "name", "Value" :  "ecosoftlk"}, {"Key" :  "resource", "Value" :  "vpc" } ]
+      }
+    },
+    "appNetworkAcl": {
+      "Type": "AWS::EC2::NetworkAcl",
+      "Properties": {
+        "Tags": [ { "Key" :  "name", "Value" :  "ecosoftlk" }, { "Key" :  "resource", "Value" :  "network_acl" } ],
+        "VpcId": { "Ref" : "appVPC" }
+      }
+    },
+    "appInAllowNetworkAclEntry": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "CidrBlock": "0.0.0.0/0",
+        "Egress": false,
+        "Protocol": -1,
+        "RuleAction": "allow",
+        "RuleNumber": 100,
+        "NetworkAclId": { "Ref": "appNetworkAcl" }
+      }
+    },
+    "appOutAllowNetworkAclEntry": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "CidrBlock": "0.0.0.0/0",
+        "Egress": true,
+        "Protocol": -1,
+        "RuleAction": "allow",
+        "RuleNumber": 100,
+        "NetworkAclId": { "Ref": "appNetworkAcl" }
+      }
+    },
+    "appInDenyNetworkAclEntry": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "CidrBlock": "0.0.0.0/0",
+        "Egress": false,
+        "Protocol": -1,
+        "RuleAction": "deny",
+        "RuleNumber": 200,
+        "NetworkAclId": { "Ref": "appNetworkAcl" }
+      }
+    },
+    "appOutDenyNetworkAclEntry": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "CidrBlock": "0.0.0.0/0",
+        "Egress": true,
+        "Protocol": -1,
+        "RuleAction": "deny",
+        "RuleNumber": 200,
+        "NetworkAclId": { "Ref": "appNetworkAcl" }
+      }
+    },
+    "appPrivateSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": {"Ref": "PublicSubnetCIDR"},
+        "AvailabilityZone": {"Fn::Select": [0, {"Fn::GetAZs": ""}]},
+        "MapPublicIpOnLaunch": false,
+        "Tags": [{"Key":  "name", "Value":  "ecosoftlk"}, {"Key":  "resource", "Value":  "private_subnet"}],
+        "VpcId": {"Ref": "appVPC"}
+      }
+    },
+    "appPublicSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": {"Ref": "PriSubnetCIDR"},
+        "AvailabilityZone": { "Fn::Select":  [ 0, { "Fn::GetAZs": "" } ] },
+        "MapPublicIpOnLaunch": false,
+        "Tags": [{"Key":  "name", "Value":  "ecosoftlk"}, {"Key":  "resource", "Value":  "public_subnet"}],
+        "VpcId": {"Ref": "appVPC"}
+      }
+    },
+    "appPubSubnetNetworkAclAssociation": {
+      "Type": "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties": {
+        "NetworkAclId": {"Ref": "appNetworkAcl"},
+        "SubnetId": {"Ref": "appPublicSubnet"}
+      }
+    },
+    "appPriSubnetNetworkAclAssociation": {
+      "Type": "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties": {
+        "NetworkAclId": {"Ref": "appNetworkAcl"},
+        "SubnetId": {"Ref": "appPrivateSubnet"}
+      }
+    },
+    "appInternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [{"Key":  "name", "Value":  "ecosoftlk"}, {"Key":  "resource", "Value":  "internet_gateway"}]
+      }
+    },
+    "appPrivateRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "Tags": [{"Key":  "name", "Value":  "ecosoftlk"}, {"Key":  "resource", "Value":  "private_route_table"}],
+        "VpcId": {"Ref":  "appVPC"}
+      }
+    },
+    "appPublicRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "Tags": [{"Key":  "name", "Value":  "ecosoftlk"}, {"Key":  "resource", "Value":  "public_route_table"}],
+        "VpcId": {"Ref": "appVPC"}
+      }
+    },
+    "appInternetGatewayRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {"Ref": "appInternetGateway"},
+        "RouteTableId": {"Ref":  "appPublicRouteTable"}
+      }
+    },
+    "appVPCGatewayAttach": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "InternetGatewayId": {"Ref": "appInternetGateway" },
+        "VpcId": {"Ref": "appVPC"}
+      }
+    },
+    "appElasticIp": {
+      "DependsOn": "appVPCGatewayAttach",
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc"
+      }
+    },
+    "appNatGateway": {
+      "Type": "AWS::EC2::NatGateway",
+      "Properties": {
+        "AllocationId": {"Fn::GetAtt":  ["appElasticIp", "AllocationId"]},
+        "SubnetId": {"Ref": "appPublicSubnet"},
+        "Tags": [{"Key": "name", "Value": "ecosoftlk"}, {"Key": "resource", "Value": "nat_gateway"}]
+      }
+    },
+    "appNatGatewayRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "NatGatewayId": {"Ref": "appNatGateway"},
+        "RouteTableId": {"Ref":  "appPrivateRouteTable"}
+      }
+    },
+    "appPubSubnetTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {"Ref": "appPublicSubnet"},
+        "RouteTableId": {"Ref": "appPublicRouteTable"}
+      }
+    },
+    "appPriSubnetTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {"Ref": "appPrivateSubnet"},
+        "RouteTableId": {"Ref": "appPrivateRouteTable"}
+      }
+    },
+    "appSshSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Allowing only ssh to bastion instance",
+        "GroupName": "allow-ssh",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "22",
+            "ToPort": "22",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    }
+  },
+
+  "Outputs": {
+    "VPC": {
+      "Description": "Reference of the created VPC",
+      "Value": {"Ref": "appVPC"}
+    },
+    "PublicSubnet": {
+      "Description": "Reference of the Public subnet",
+      "Value": {"Ref": "appPublicSubnet" }
+    },
+    "PrivateSubnet": {
+      "Description": "Reference of the Private subnet",
+      "Value": {"Ref": "appPrivateSubnet" }
+    }
+
+  }
+
+}
